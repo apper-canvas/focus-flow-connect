@@ -1,4 +1,5 @@
 import projectsData from '@/services/mockData/projects.json';
+import { toast } from 'react-toastify';
 
 // Create a copy to avoid mutating the original data
 let projects = [...projectsData];
@@ -39,7 +40,47 @@ export const projectService = {
     };
 
     projects.push(newProject);
+    
+    // Create project in Clockify (async, don't block local creation)
+    this.createInClockify(newProject).catch(error => {
+      console.info(`apper_info: An error was received in this function: ${import.meta.env.VITE_CREATE_CLOCKIFY_PROJECT}. The error is: ${error.message}`);
+    });
+    
     return { ...newProject };
+  },
+
+  // Create project in Clockify
+  async createInClockify(projectData) {
+    try {
+      const { ApperClient } = window.ApperSDK;
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      });
+
+      const result = await apperClient.functions.invoke(import.meta.env.VITE_CREATE_CLOCKIFY_PROJECT, {
+        body: JSON.stringify({
+          projectName: projectData.name,
+          projectDescription: projectData.description,
+          projectStatus: projectData.status
+        }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const responseData = await result.json();
+      
+      if (responseData.success) {
+        toast.success('Project created in Clockify successfully!');
+      } else {
+        console.info(`apper_info: An error was received in this function: ${import.meta.env.VITE_CREATE_CLOCKIFY_PROJECT}. The response body is: ${JSON.stringify(responseData)}.`);
+        toast.error('Project created locally, but failed to sync with Clockify');
+      }
+    } catch (error) {
+      console.info(`apper_info: An error was received in this function: ${import.meta.env.VITE_CREATE_CLOCKIFY_PROJECT}. The error is: ${error.message}`);
+      toast.error('Project created locally, but Clockify sync unavailable');
+    }
   },
 
   // Update existing project
